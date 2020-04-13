@@ -63,9 +63,12 @@ app.post("/signup", validator.body(bodySchema), (req, res) => {
   }
 })
 
-app.post("/login", validator.body(bodySchema), (req, res) => {
+app.post("/login", (req, res) => {
   try {
     const { username, password } = req.body;
+    if (!(username && password)) {
+      return res.status(400).send(response(false, 'username or password missing'));
+    }
     const user = getUser(username)
     if (!(user && user.password === password)) {
       return res.status(400).send(response(false, 'username or password is incorrect'));
