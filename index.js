@@ -8,7 +8,19 @@ const jwt = require('njwt');
 const axios = require('axios');
 const parser = require('xml2json');
 const newsUrl = require('./constant/urlConstants');
+const Joi = require('joi')
+const validator = require('express-joi-validation').createValidator({})
 require('dotenv').config()
+
+const bodySchema = Joi.object({
+  username: Joi.string().min(2).required(),
+  password: Joi.string().min(4).regex(/(?=.*\d)(?=.*[A-Z]).*/).required()
+
+})
+
+const headerSchema = Joi.object({
+  token: Joi.string().required()
+});
 
 
 const cred = './cred.json'
@@ -33,12 +45,10 @@ app.get("/", (req, res) => {
   res.status(200).send(response(true, ` backend working`));
 });
 //  joi validation can be implememted for username and password regex
-app.post("/signup", (req, res) => {
+app.post("/signup", validator.body(bodySchema), (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!(username && password)) {
-      return res.status(400).send(response(false, 'username or password missing'));
-    }
+
     const user = getUser(username);
     if (user) {
       return res.status(400).send(response(false, 'user already exist'));
@@ -53,12 +63,9 @@ app.post("/signup", (req, res) => {
   }
 })
 
-app.post("/login", (req, res) => {
+app.post("/login", validator.body(bodySchema), (req, res) => {
   try {
     const { username, password } = req.body;
-    if (!(username && password)) {
-      return res.status(400).send(response(false, 'username or password missing'));
-    }
     const user = getUser(username)
     if (!(user && user.password === password)) {
       return res.status(400).send(response(false, 'username or password is incorrect'));
@@ -73,7 +80,7 @@ app.post("/login", (req, res) => {
   }
 })
 
-app.get("/dashboard", async (req, res) => {
+app.get("/dashboard", validator.headers(headerSchema), async (req, res) => {
   try {
     if (!validateRequest(req)) {
       return res.status(400).send(response(false, 'no auth'));
@@ -132,19 +139,23 @@ const savePayload = (jsonPayload) => {
   }
 }
 const getUser = (username) => {
-  const rawData = fs.readFileSync(cred);
-  if (rawData.toString().length) {
-    data = JSON.parse(rawData);
-    if (data[username]) {
-      return data[username];
+  try {
+    const rawData = fs.readFileSync(cred);
+    if (rawData.toString().length) {
+      data = JSON.parse(rawData);
+      if (data[username]) {
+        return data[username];
+      }
     }
+    return false;
+  } catch (err) {
+    throw err;
   }
-  return false;
 }
 
 const validateRequest = (req) => {
-  const { token } = req.headers;
-  if (token) {
+  try {
+    const { token } = req.headers;
     const decryptedToken = decryptToken(token);
     const body = get(decryptedToken, 'body', {});
     if (body && body.username) {
@@ -153,8 +164,10 @@ const validateRequest = (req) => {
         return user;
       };
     };
-  };
-  return false;
+    return false;
+  } catch (err) {
+    throw err;
+  }
 };
 
 const generateToken = (payload) => {
