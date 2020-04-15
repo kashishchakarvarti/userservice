@@ -9,7 +9,9 @@ const axios = require('axios');
 const parser = require('xml2json');
 const newsUrl = require('./constant/urlConstants');
 const Joi = require('joi')
-const validator = require('express-joi-validation').createValidator({})
+const validator = require('express-joi-validation').createValidator({});
+const shortid = require('shortid');
+
 require('dotenv').config()
 
 const bodySchema = Joi.object({
@@ -85,8 +87,8 @@ app.post("/login", (req, res) => {
 
 app.get("/dashboard", validator.headers(headerSchema), async (req, res) => {
   try {
-    if (!validateRequest(req)) {
-      return res.status(400).send(response(false, 'no auth'));
+    if (validateRequest(req) instanceof Error) {
+      return res.status(403).send(response(false, 'no auth'));
     }
     let arr = [];
     for (let i in newsUrl.url) {
@@ -167,7 +169,7 @@ const validateRequest = (req) => {
         return user;
       };
     };
-    return false;
+    return new Error();
   } catch (err) {
     throw err;
   }
@@ -176,7 +178,7 @@ const validateRequest = (req) => {
 const generateToken = (payload) => {
   try {
     const token = jwt.create(payload, process.env.JWT_SECRET)
-    token.setExpiration(new Date().getTime() + 60 * 100000)
+    token.setExpiration(new Date().getTime() + 60 * 10000)
     return token.compact();
   } catch (err) {
     throw err;
@@ -186,18 +188,25 @@ const decryptToken = (token) => {
   try {
     return jwt.verify(token, process.env.JWT_SECRET);
   } catch (err) {
-    throw err;
+    return err;
   }
 }
 
 const fetchNews = async (promiseArray) => {
   try {
-    return Promise.all(promiseArray).then((responseArray) => {
-      return responseArray.map((responseObj) => {
+    let arr = [];
+   return Promise.all(promiseArray).then((responseArray) => {
+       responseArray.map((responseObj) => {
         const parsedJson = parser.toJson(responseObj.data);
         const newsArray = get(JSON.parse(parsedJson), 'rss.channel.item', [])
-        return newsArray.filter((news, i) => i < 5)
+         newsArray.map((news, i) => {
+          if(i < 5) {
+            news.id = shortid.generate();
+            arr.push(news);
+          };
+        });
       })
+      return arr;
     }).catch(error => {
       console.log(error)
     });
